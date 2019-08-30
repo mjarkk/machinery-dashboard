@@ -1,0 +1,15 @@
+node_modules
+README.md
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+config.json
+machinery-dashboard*
+main*
+!main.go
+build
+vendor
