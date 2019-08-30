@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mjarkk/machinery-dashboard/shared"
+	"github.com/mjarkk/machinery-dashboard/plugin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -85,9 +85,9 @@ func main() {
 
 		defer cur.Close(c())
 
-		output := []shared.DBEntry{}
+		output := []plugin.DBEntry{}
 		for cur.Next(c()) {
-			var newEntry shared.DBEntry
+			var newEntry plugin.DBEntry
 			err := cur.Decode(&newEntry)
 			if resErr(g, err) {
 				return
@@ -100,14 +100,32 @@ func main() {
 		for _, entry := range output {
 			timelineEntries := []timelineEntry{}
 			for _, point := range entry.Points {
+
 				pointTime := time.Unix(point.Time, 0)
-				if len(timelineEntries) == 0 || pointTime.After(time.Unix(timelineEntries[len(timelineEntries)-1].From, 0).Add(time.Minute*30)) {
+				if len(timelineEntries) == 0 {
 					timelineEntries = append(timelineEntries, timelineEntry{
 						From:   point.Time,
-						Points: []shared.DataPoint{},
+						Points: []plugin.DataPoint{},
 					})
 				}
-				currentPoints := timelineEntries[len(timelineEntries)-1].Points
+				lastEntry := timelineEntries[len(timelineEntries)-1]
+
+				forCount := 0
+				removeFrom := len(timelineEntries) + 1
+				for pointTime.After(time.Unix(lastEntry.From, 0).Add(time.Minute * 30)) {
+					forCount++
+					timelineEntries = append(timelineEntries, timelineEntry{
+						From:   time.Unix(lastEntry.From, 0).Add(time.Minute * 30).Unix(),
+						Points: []plugin.DataPoint{},
+					})
+					lastEntry = timelineEntries[len(timelineEntries)-1]
+				}
+
+				if forCount >= 3 {
+					timelineEntries = append(timelineEntries[:removeFrom], timelineEntries[removeFrom+forCount-3:]...)
+				}
+
+				currentPoints := lastEntry.Points
 				currentPoints = append(currentPoints, point)
 				timelineEntries[len(timelineEntries)-1].Points = currentPoints
 			}

@@ -1,4 +1,4 @@
 # machinery-dashboard
-a dashboard for machinery
+dashboard for machinery stats
 
-Note: this is still a work in progress
+![Screenshot](./docs/screenshot.png "Screenshot")

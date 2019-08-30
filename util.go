@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/mjarkk/machinery-dashboard/shared"
+	"github.com/mjarkk/machinery-dashboard/plugin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -18,6 +18,6 @@ type apiOutput struct {
 }
 
 type timelineEntry struct {
-	Points []shared.DataPoint `json:"timelineEntry"`
+	Points []plugin.DataPoint `json:"timelineEntry"`
 	From   int64              `json:"from"`
 }

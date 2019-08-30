@@ -8,8 +8,6 @@ export default class Graph extends React.Component {
     const queue = this.props.data.queue
     const timeline = this.props.data.timeline.map(entry => {
       entry.from = (new Date(entry.from * 1000)).toString()
-      console.log(entry.timelineEntry.map(el => el.Success).filter(el => el).length)
-      console.log(entry.timelineEntry.map(el => el.Success).filter(el => !el).length)
       return entry
     })
     return (

@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/mjarkk/machinery-dashboard/shared"
+	"github.com/mjarkk/machinery-dashboard/plugin"
 )
 
-func getConfig() (shared.Options, error) {
-	var toReturn shared.Options
+func getConfig() (plugin.Options, error) {
+	var toReturn plugin.Options
 
 	data, err := ioutil.ReadFile("./config.json")
 	if err != nil {
