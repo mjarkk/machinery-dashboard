@@ -3,7 +3,7 @@ dashboard for machinery stats
 
 ![Screenshot](./docs/screenshot.png "Screenshot")
 
-## Add the log recorder to the machinery worker(s)
+## Add the event recorder to the machinery worker(s)
 ```go
 import (
 	"github.com/RichardKnop/machinery/v1"

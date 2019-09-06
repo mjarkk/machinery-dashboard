@@ -100,22 +100,37 @@ func main() {
 		for _, dbEntry := range DBOutput {
 			dataPoints := []plugin.DataPoint{}
 
-			for _, point := range dbEntry.Points {
+			noExtraEmptyPointPrefix := false
+			for i, point := range dbEntry.Points {
 				pointTime := time.Unix(point.From, 0)
-				dataPoints = append(
-					dataPoints,
-					plugin.DataPoint{
-						From:      pointTime.Add(-(time.Minute * 10)).Unix(),
-						Errors:    []string{},
-						Successes: 0,
-					},
-					point,
-					plugin.DataPoint{
-						From:      pointTime.Add(time.Minute * 10).Unix(),
-						Errors:    []string{},
-						Successes: 0,
-					},
-				)
+
+				if !noExtraEmptyPointPrefix {
+					dataPoints = append(
+						dataPoints,
+						plugin.DataPoint{
+							From:      pointTime.Add(-(time.Minute * 10)).Unix(),
+							Errors:    []string{},
+							Successes: 0,
+						},
+					)
+				} else {
+					noExtraEmptyPointPrefix = false
+				}
+
+				dataPoints = append(dataPoints, point)
+
+				if len(dbEntry.Points) > i+1 && time.Unix(dbEntry.Points[i+1].From, 0).Before(pointTime.Add(time.Minute*40)) {
+					noExtraEmptyPointPrefix = true
+				} else {
+					dataPoints = append(
+						dataPoints,
+						plugin.DataPoint{
+							From:      pointTime.Add(time.Minute * 10).Unix(),
+							Errors:    []string{},
+							Successes: 0,
+						},
+					)
+				}
 			}
 
 			toReturn = append(toReturn, apiOutput{
