@@ -8,7 +8,7 @@ cloud.google.com/go/pubsub/internal/distribution
 cloud.google.com/go/compute/metadata
 # github.com/RichardKnop/logging v0.0.0-20181101035820-b1d5d44c82d6
 github.com/RichardKnop/logging
-# github.com/RichardKnop/machinery v1.6.8
+# github.com/RichardKnop/machinery v1.6.9-0.20190905210727-45c722bb4850
 github.com/RichardKnop/machinery/v1
 github.com/RichardKnop/machinery/v1/tasks
 github.com/RichardKnop/machinery/v1/backends/amqp

@@ -71,7 +71,7 @@ func main() {
 		c.Next()
 	})
 
-	r.Static("/build", "./frontend/build")
+	r.Static("/static", "./frontend/build/static")
 	r.StaticFile("/favicon.ico", "./frontend/build/favicon.ico")
 	r.StaticFile("/", "./frontend/build/index.html")
 

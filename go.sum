@@ -14,6 +14,8 @@ github.com/RichardKnop/logging v0.0.0-20181101035820-b1d5d44c82d6 h1:Vgjpn7q8aQn
 github.com/RichardKnop/logging v0.0.0-20181101035820-b1d5d44c82d6/go.mod h1:rJJ84PyA/Wlmw1hO+xTzV2wsSUon6J5ktg0g8BF2PuU=
 github.com/RichardKnop/machinery v1.6.8 h1:HLZ/1yMFcKgdDr6f4JQYSaSBTCFdPYPtRnczq5Ed7KY=
 github.com/RichardKnop/machinery v1.6.8/go.mod h1:MbFUYq4I2B4SgGQqfByLZq6dGQ7qqTVT+/NofUuXb5Y=
+github.com/RichardKnop/machinery v1.6.9-0.20190905210727-45c722bb4850 h1:4R7J+0e/fHNs5BZFj+iW7HMcpVcbX4n3rbZQJIBYElg=
+github.com/RichardKnop/machinery v1.6.9-0.20190905210727-45c722bb4850/go.mod h1:BO7MG/5tvdpgMVkOT8V94SEf8x8H8aceRzTt8Tx1IMc=
 github.com/RichardKnop/redsync v1.2.0 h1:gK35hR3zZkQigHKm8wOGb9MpJ9BsrW6MzxezwjTcHP0=
 github.com/RichardKnop/redsync v1.2.0/go.mod h1:9b8nBGAX3bE2uCfJGSnsDvF23mKyHTZzmvmj5FH3Tp0=
 github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=
