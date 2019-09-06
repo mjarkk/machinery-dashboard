@@ -7,6 +7,7 @@ import (
 	"github.com/RichardKnop/machinery/v1"
 	"github.com/RichardKnop/machinery/v1/tasks"
 	"github.com/globalsign/mgo/bson"
+	"github.com/jasonlvhit/gocron"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -36,9 +37,9 @@ type DBEntry struct {
 
 // DataPoint tells if an entry is successfull or not
 type DataPoint struct {
-	Time    int64  `bson:"time"`
-	Success bool   `bson:"success"` // True means no error
-	Error   string `bson:"error"`   // If there is an error you can few it here
+	From      int64    `bson:"from"`
+	Successes int      `bson:"successes"`
+	Errors    []string `bson:"errors"`
 }
 
 // NewEntry creates a new DBEntry
@@ -52,13 +53,33 @@ func NewEntry(queue string) DBEntry {
 
 // NewEntry ads an entry to the (*DBEntry).Points
 func (e *DBEntry) NewEntry(err error) {
+	now := time.Now()
+
+	for i, point := range e.Points {
+		pointTime := time.Unix(point.From, 0)
+		if !pointTime.Add(time.Minute * 30).After(now) {
+			continue
+		}
+		if err == nil {
+			point.Successes++
+		} else {
+			point.Errors = append(point.Errors, err.Error())
+		}
+		e.Points[i] = point
+		return
+	}
+
 	newPoint := DataPoint{
-		Success: err == nil,
-		Time:    time.Now().Unix(),
+		Errors:    []string{},
+		From:      now.Unix(),
+		Successes: 0,
 	}
-	if err != nil {
-		newPoint.Error = err.Error()
+	if err == nil {
+		newPoint.Successes++
+	} else {
+		newPoint.Errors = append(newPoint.Errors, err.Error())
 	}
+
 	e.Points = append(e.Points, newPoint)
 }
 
@@ -111,6 +132,12 @@ func Init(worker *machinery.Worker, initOptions Options) error {
 	worker.SetErrorHandler(p.ErrorHandeler)
 	worker.SetPostTaskHandler(p.PostTaskHandler)
 
+	gocron.Every(1).Hour().Do(p.Cleanup)
+	go func() {
+		time.Sleep(time.Minute * 2)
+		p.Cleanup()
+	}()
+
 	return nil
 }
 
@@ -141,4 +168,33 @@ func (p *plugin) AddPoint(point error) error {
 
 	_, err = p.mongodb.collection.UpdateOne(c(), query, bson.M{"$set": bson.M{"points": data.Points}})
 	return err
+}
+
+// Cleanup cleans up the database
+func (p *plugin) Cleanup() {
+	query := bson.M{"queue": p.worker.Queue}
+
+	var data DBEntry
+	err := p.mongodb.collection.FindOne(c(), query).Decode(&data)
+	if err != nil {
+		return
+	}
+
+	removeLaterThen := time.Now().Add(-(time.Hour * 24 * 3))
+
+	removedSomething := false
+	for _, point := range data.Points {
+		pointTime := time.Unix(point.From, 0)
+		if pointTime.After(removeLaterThen) {
+			break
+		}
+		removedSomething = true
+		data.Points = data.Points[1:]
+	}
+
+	if !removedSomething {
+		return
+	}
+
+	p.mongodb.collection.UpdateOne(c(), query, bson.M{"$set": bson.M{"points": data.Points}})
 }

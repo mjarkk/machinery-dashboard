@@ -7,7 +7,7 @@ export default class Graph extends React.Component {
   render() {
     const queue = this.props.data.queue
     const timeline = this.props.data.timeline.map(entry => {
-      entry.from = (new Date(entry.from * 1000)).toString()
+      entry.From = (new Date(entry.From * 1000)).toString()
       return entry
     })
     return (
@@ -24,16 +24,16 @@ export default class Graph extends React.Component {
             colors: ["#FF1654", "#17d352"],
             xaxis: {
               type: 'datetime',
-              categories: timeline.map(el => el.from)
+              categories: timeline.map(el => el.From)
             }
           }}
           series={[
             {
               name: "Errors",
-              data: timeline.map(el => el.timelineEntry.map(el => el.Success).filter(el => !el).length)
+              data: timeline.map(el => el.Errors.length)
             }, {
               name: "Success",
-              data: timeline.map(el => el.timelineEntry.map(el => el.Success).filter(el => el).length)
+              data: timeline.map(el => el.Successes)
             }
           ]}
           type="area"

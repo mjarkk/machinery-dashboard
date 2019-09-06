@@ -85,54 +85,43 @@ func main() {
 
 		defer cur.Close(c())
 
-		output := []plugin.DBEntry{}
+		DBOutput := []plugin.DBEntry{}
 		for cur.Next(c()) {
 			var newEntry plugin.DBEntry
 			err := cur.Decode(&newEntry)
 			if resErr(g, err) {
 				return
 			}
-			output = append(output, newEntry)
+			DBOutput = append(DBOutput, newEntry)
 		}
 
 		// Format the data
 		toReturn := []apiOutput{}
-		for _, entry := range output {
-			timelineEntries := []timelineEntry{}
-			for _, point := range entry.Points {
+		for _, dbEntry := range DBOutput {
+			dataPoints := []plugin.DataPoint{}
 
-				pointTime := time.Unix(point.Time, 0)
-				if len(timelineEntries) == 0 {
-					timelineEntries = append(timelineEntries, timelineEntry{
-						From:   point.Time,
-						Points: []plugin.DataPoint{},
-					})
-				}
-				lastEntry := timelineEntries[len(timelineEntries)-1]
-
-				forCount := 0
-				removeFrom := len(timelineEntries) + 1
-				for pointTime.After(time.Unix(lastEntry.From, 0).Add(time.Minute * 30)) {
-					forCount++
-					timelineEntries = append(timelineEntries, timelineEntry{
-						From:   time.Unix(lastEntry.From, 0).Add(time.Minute * 30).Unix(),
-						Points: []plugin.DataPoint{},
-					})
-					lastEntry = timelineEntries[len(timelineEntries)-1]
-				}
-
-				if forCount >= 3 {
-					timelineEntries = append(timelineEntries[:removeFrom], timelineEntries[removeFrom+forCount-3:]...)
-				}
-
-				currentPoints := lastEntry.Points
-				currentPoints = append(currentPoints, point)
-				timelineEntries[len(timelineEntries)-1].Points = currentPoints
+			for _, point := range dbEntry.Points {
+				pointTime := time.Unix(point.From, 0)
+				dataPoints = append(
+					dataPoints,
+					plugin.DataPoint{
+						From:      pointTime.Add(-(time.Minute * 10)).Unix(),
+						Errors:    []string{},
+						Successes: 0,
+					},
+					point,
+					plugin.DataPoint{
+						From:      pointTime.Add(time.Minute * 10).Unix(),
+						Errors:    []string{},
+						Successes: 0,
+					},
+				)
 			}
+
 			toReturn = append(toReturn, apiOutput{
-				ID:       entry.ID,
-				Queue:    entry.Queue,
-				Timeline: timelineEntries,
+				ID:       dbEntry.ID,
+				Queue:    dbEntry.Queue,
+				Timeline: dataPoints,
 			})
 		}
 

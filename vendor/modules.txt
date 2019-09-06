@@ -103,6 +103,8 @@ github.com/gomodule/redigo/internal
 github.com/google/uuid
 # github.com/googleapis/gax-go/v2 v2.0.3
 github.com/googleapis/gax-go/v2
+# github.com/jasonlvhit/gocron v0.0.0-20190829164038-7ef3bafdc25c
+github.com/jasonlvhit/gocron
 # github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
 github.com/jmespath/go-jmespath
 # github.com/json-iterator/go v1.1.6
