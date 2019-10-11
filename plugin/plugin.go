@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/RichardKnop/machinery/v1"
@@ -14,6 +15,35 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
+
+const (
+	taskErr     = "Machinery_dashboard_Error"
+	taskSuccess = "Machinery_dashboard_Success"
+)
+
+// TaskStatus contains the status of a job
+type TaskStatus uint8
+
+const (
+	StatusOke TaskStatus = iota + 1
+	StatusRetry
+	StatusError
+)
+
+// IsOke tells if the task status is oke
+func (s TaskStatus) IsOke() bool {
+	return s == StatusOke
+}
+
+// IsRetry tells if the task status is retry
+func (s TaskStatus) IsRetry() bool {
+	return s == StatusRetry
+}
+
+// IsError tells if the task status is error
+func (s TaskStatus) IsError() bool {
+	return s == StatusError
+}
 
 // Options are the options for the Init function
 // And contains all settings for the frontend
@@ -37,9 +67,10 @@ type DBEntry struct {
 
 // DataPoint tells if an entry is successfull or not
 type DataPoint struct {
-	From      int64    `bson:"from"`
-	Successes int      `bson:"successes"`
-	Errors    []string `bson:"errors"`
+	From      int64    `bson:"from" json:"from"`
+	Successes int      `bson:"successes" json:"successes"`
+	Retries   int      `bson:"retries" json:"retries"`
+	Errors    []string `bson:"errors" json:"errors"` // Maybe for later
 }
 
 // NewEntry creates a new DBEntry
@@ -52,7 +83,7 @@ func NewEntry(queue string) DBEntry {
 }
 
 // NewEntry ads an entry to the (*DBEntry).Points
-func (e *DBEntry) NewEntry(err error) {
+func (e *DBEntry) NewEntry(status TaskStatus, ifErrorMsg error) {
 	now := time.Now()
 
 	for i, point := range e.Points {
@@ -60,24 +91,29 @@ func (e *DBEntry) NewEntry(err error) {
 		if !pointTime.Add(time.Minute * 30).After(now) {
 			continue
 		}
-		if err == nil {
+		switch status {
+		case StatusOke:
 			point.Successes++
-		} else {
-			point.Errors = append(point.Errors, err.Error())
+		case StatusError:
+			point.Errors = append(point.Errors, ifErrorMsg.Error())
+		case StatusRetry:
+			point.Retries++
 		}
 		e.Points[i] = point
 		return
 	}
 
 	newPoint := DataPoint{
-		Errors:    []string{},
-		From:      now.Unix(),
-		Successes: 0,
+		From:   now.Unix(),
+		Errors: []string{},
 	}
-	if err == nil {
+	switch status {
+	case StatusOke:
 		newPoint.Successes++
-	} else {
-		newPoint.Errors = append(newPoint.Errors, err.Error())
+	case StatusError:
+		newPoint.Errors = []string{ifErrorMsg.Error()}
+	case StatusRetry:
+		newPoint.Retries++
 	}
 
 	e.Points = append(e.Points, newPoint)
@@ -129,24 +165,72 @@ func Init(worker *machinery.Worker, initOptions Options) error {
 			collection: collection,
 		},
 	}
-	worker.SetErrorHandler(p.ErrorHandeler)
-	worker.SetPostTaskHandler(p.PostTaskHandler)
+
+	worker.SetPreTaskHandler(p.PreTaskHandler)
 
 	gocron.Every(1).Hour().Do(p.Cleanup)
 	go func() {
 		time.Sleep(time.Minute * 2)
 		p.Cleanup()
 	}()
+	p.listenForJobs()
 
 	return nil
 }
 
-func (p *plugin) ErrorHandeler(err error) {
-	logError(p.AddPoint(err))
+func (p *plugin) PreTaskHandler(task *tasks.Signature) {
+	if task.Name == taskSuccess {
+		return
+	}
+	if task.Name == taskErr {
+		return
+	}
+
+	for _, tasks := range [][]*tasks.Signature{task.OnSuccess, task.OnError} {
+		if tasks != nil && len(tasks) > 0 {
+			for _, task := range tasks {
+				if task != nil && (task.Name == taskSuccess || task.Name == taskErr) {
+					// This task is already registered thisone can be seen as fails
+					p.AddPoint(StatusRetry, nil)
+					return
+				}
+			}
+		}
+	}
+
+	if task.OnError == nil {
+		task.OnError = []*tasks.Signature{}
+	}
+	if task.OnSuccess == nil {
+		task.OnSuccess = []*tasks.Signature{}
+	}
+
+	args := []tasks.Arg{{
+		Type:  "string",
+		Value: task.Name,
+	}}
+
+	errTask, _ := tasks.NewSignature(taskErr, args)
+	errTask.RoutingKey = p.worker.Queue
+	task.OnError = append(task.OnError, errTask)
+
+	successTask, _ := tasks.NewSignature(taskSuccess, args)
+	successTask.RoutingKey = p.worker.Queue
+	task.OnSuccess = append(task.OnSuccess, successTask)
 }
 
-func (p *plugin) PostTaskHandler(task *tasks.Signature) {
-	logError(p.AddPoint(nil))
+func (p *plugin) listenForJobs() {
+	server := p.worker.GetServer()
+	server.RegisterTasks(map[string]interface{}{
+		taskErr: func(err, jobName string) error {
+			p.AddPoint(StatusError, errors.New(err))
+			return nil
+		},
+		taskSuccess: func(jobName string) error {
+			p.AddPoint(StatusOke, nil)
+			return nil
+		},
+	})
 }
 
 func logError(err error) {
@@ -156,7 +240,7 @@ func logError(err error) {
 }
 
 // AddPoint adds a data point to the database
-func (p *plugin) AddPoint(point error) error {
+func (p *plugin) AddPoint(status TaskStatus, ifErrMsg error) error {
 	query := bson.M{"queue": p.worker.Queue}
 
 	var data DBEntry
@@ -164,7 +248,7 @@ func (p *plugin) AddPoint(point error) error {
 	if err != nil {
 		return err
 	}
-	data.NewEntry(point)
+	data.NewEntry(status, ifErrMsg)
 
 	_, err = p.mongodb.collection.UpdateOne(c(), query, bson.M{"$set": bson.M{"points": data.Points}})
 	return err

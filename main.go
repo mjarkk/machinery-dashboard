@@ -108,9 +108,8 @@ func main() {
 					dataPoints = append(
 						dataPoints,
 						plugin.DataPoint{
-							From:      pointTime.Add(-(time.Minute * 10)).Unix(),
-							Errors:    []string{},
-							Successes: 0,
+							From:   pointTime.Add(-(time.Minute * 10)).Unix(),
+							Errors: []string{},
 						},
 					)
 				} else {
@@ -125,9 +124,8 @@ func main() {
 					dataPoints = append(
 						dataPoints,
 						plugin.DataPoint{
-							From:      pointTime.Add(time.Minute * 10).Unix(),
-							Errors:    []string{},
-							Successes: 0,
+							From:   pointTime.Add(time.Minute * 10).Unix(),
+							Errors: []string{},
 						},
 					)
 				}

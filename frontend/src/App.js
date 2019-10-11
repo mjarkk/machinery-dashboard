@@ -13,8 +13,14 @@ class App extends React.Component {
     this.setup()
   }
   async setup() {
-    const res = await get('')
-    this.setState({ data: res.data })
+    try {
+      const res = await get('')
+      const { data } = res
+      this.setState({ data })
+    } catch (error) {
+      console.log("Can't fetch data network, Error:", error)
+    }
+    setTimeout(() => this.setup(), 10000)
   }
   render() {
     return (
