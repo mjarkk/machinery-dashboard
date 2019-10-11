@@ -1,9 +1,13 @@
 # machinery-dashboard
-dashboard for machinery stats
+dashboard for [machinery](https://github.com/RichardKnop/machinery) stats
 
 ![Screenshot](./docs/screenshot.png "Screenshot")
 
-## Add the event recorder to the machinery worker(s)
+## Setup:
+*Note: for storing the stats we use mongodb*  
+*If more people use this i might add sql support later on*  
+
+#### 1. Add the event recorder to the machinery worker(s)
 ```go
 import (
 	"github.com/RichardKnop/machinery/v1"
@@ -28,10 +32,9 @@ plugin.Init(worker, plugin.Options{
 })
 ```
 
-## The dashboard
-Curretnly we only support mongodb as database
+#### 2. Setup the dashboard
 
-#### 1. Create a config file named: `config.json`
+Create a config file named: `config.json`  
 ```json
 {
   "mongodb": {
@@ -42,7 +45,7 @@ Curretnly we only support mongodb as database
 
 ```
 
-#### 2. Run the docker container
+Run the docker container  
 ```
 docker run \
   -p 9090:9090 \
@@ -54,5 +57,5 @@ docker run \
 ```sh
 git clone https://github.com/mjarkk/machinery-dashboard
 cd machinery-dashboard
-docker build -t mjarkk/machinery-dashboard
+docker build -t mjarkk/machinery-dashboard .
 ```
