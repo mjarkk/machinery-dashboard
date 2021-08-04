@@ -8,8 +8,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson/bsontype"
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -29,6 +29,7 @@ type BatchCursor struct {
 	firstBatch           bool
 	cmdMonitor           *event.CommandMonitor
 	postBatchResumeToken bsoncore.Document
+	crypt                *Crypt
 
 	// legacy server (< 3.2) fields
 	legacy      bool // This field is provided for ListCollectionsBatchCursor.
@@ -101,6 +102,7 @@ type CursorOptions struct {
 	MaxTimeMS      int64
 	Limit          int32
 	CommandMonitor *event.CommandMonitor
+	Crypt          *Crypt
 }
 
 // NewBatchCursor creates a new BatchCursor from the provided parameters.
@@ -118,6 +120,7 @@ func NewBatchCursor(cr CursorResponse, clientSession *session.Client, clock *ses
 		cmdMonitor:           opts.CommandMonitor,
 		firstBatch:           true,
 		postBatchResumeToken: cr.postBatchResumeToken,
+		crypt:                opts.Crypt,
 	}
 
 	if ds != nil {
@@ -238,7 +241,7 @@ func (bc *BatchCursor) getMore(ctx context.Context) {
 
 	// Required for legacy operations which don't support limit.
 	numToReturn := bc.batchSize
-	if bc.limit != 0 && bc.numReturned+bc.batchSize > bc.limit {
+	if bc.limit != 0 && bc.numReturned+bc.batchSize >= bc.limit {
 		numToReturn = bc.limit - bc.numReturned
 		if numToReturn <= 0 {
 			err := bc.Close(ctx)
@@ -263,7 +266,7 @@ func (bc *BatchCursor) getMore(ctx context.Context) {
 		},
 		Database:   bc.database,
 		Deployment: SingleServerDeployment{Server: bc.server},
-		ProcessResponseFn: func(response bsoncore.Document, srvr Server, desc description.Server) error {
+		ProcessResponseFn: func(response bsoncore.Document, srvr Server, desc description.Server, currIndex int) error {
 			id, ok := response.Lookup("cursor", "id").Int64OK()
 			if !ok {
 				return fmt.Errorf("cursor.id should be an int64 but is a BSON %s", response.Lookup("cursor", "id").Type)
@@ -299,6 +302,7 @@ func (bc *BatchCursor) getMore(ctx context.Context) {
 		Clock:          bc.clock,
 		Legacy:         LegacyGetMore,
 		CommandMonitor: bc.cmdMonitor,
+		Crypt:          bc.crypt,
 	}.Execute(ctx, nil)
 
 	// Required for legacy operations which don't support limit.

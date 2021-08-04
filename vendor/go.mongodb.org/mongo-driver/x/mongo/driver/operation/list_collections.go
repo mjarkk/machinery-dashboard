@@ -13,10 +13,10 @@ import (
 	"errors"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -27,12 +27,14 @@ type ListCollections struct {
 	session        *session.Client
 	clock          *session.ClusterClock
 	monitor        *event.CommandMonitor
+	crypt          *driver.Crypt
 	database       string
 	deployment     driver.Deployment
 	readPreference *readpref.ReadPref
 	selector       description.ServerSelector
 	retry          *driver.RetryMode
 	result         driver.CursorResponse
+	batchSize      *int32
 }
 
 // NewListCollections constructs and returns a new ListCollections.
@@ -55,7 +57,7 @@ func (lc *ListCollections) Result(opts driver.CursorOptions) (*driver.ListCollec
 	return driver.NewListCollectionsBatchCursor(bc)
 }
 
-func (lc *ListCollections) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
+func (lc *ListCollections) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, _ int) error {
 	var err error
 	lc.result, err = driver.NewCursorResponse(response, srvr, desc)
 	return err
@@ -75,6 +77,7 @@ func (lc *ListCollections) Execute(ctx context.Context) error {
 		Client:            lc.session,
 		Clock:             lc.clock,
 		CommandMonitor:    lc.monitor,
+		Crypt:             lc.crypt,
 		Database:          lc.database,
 		Deployment:        lc.deployment,
 		ReadPreference:    lc.readPreference,
@@ -93,6 +96,12 @@ func (lc *ListCollections) command(dst []byte, desc description.SelectedServer) 
 	if lc.nameOnly != nil {
 		dst = bsoncore.AppendBooleanElement(dst, "nameOnly", *lc.nameOnly)
 	}
+	cursorDoc := bsoncore.NewDocumentBuilder()
+	if lc.batchSize != nil {
+		cursorDoc.AppendInt32("batchSize", *lc.batchSize)
+	}
+	dst = bsoncore.AppendDocumentElement(dst, "cursor", cursorDoc.Build())
+
 	return dst, nil
 }
 
@@ -146,6 +155,16 @@ func (lc *ListCollections) CommandMonitor(monitor *event.CommandMonitor) *ListCo
 	return lc
 }
 
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (lc *ListCollections) Crypt(crypt *driver.Crypt) *ListCollections {
+	if lc == nil {
+		lc = new(ListCollections)
+	}
+
+	lc.crypt = crypt
+	return lc
+}
+
 // Database sets the database to run this operation against.
 func (lc *ListCollections) Database(database string) *ListCollections {
 	if lc == nil {
@@ -194,5 +213,15 @@ func (lc *ListCollections) Retry(retry driver.RetryMode) *ListCollections {
 	}
 
 	lc.retry = &retry
+	return lc
+}
+
+// BatchSize specifies the number of documents to return in every batch.
+func (lc *ListCollections) BatchSize(batchSize int32) *ListCollections {
+	if lc == nil {
+		lc = new(ListCollections)
+	}
+
+	lc.batchSize = &batchSize
 	return lc
 }

@@ -14,10 +14,10 @@ import (
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -29,6 +29,7 @@ type DropIndexes struct {
 	clock        *session.ClusterClock
 	collection   string
 	monitor      *event.CommandMonitor
+	crypt        *driver.Crypt
 	database     string
 	deployment   driver.Deployment
 	selector     description.ServerSelector
@@ -70,7 +71,7 @@ func NewDropIndexes(index string) *DropIndexes {
 // Result returns the result of executing this operation.
 func (di *DropIndexes) Result() DropIndexesResult { return di.result }
 
-func (di *DropIndexes) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
+func (di *DropIndexes) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, _ int) error {
 	var err error
 	di.result, err = buildDropIndexesResult(response, srvr)
 	return err
@@ -88,6 +89,7 @@ func (di *DropIndexes) Execute(ctx context.Context) error {
 		Client:            di.session,
 		Clock:             di.clock,
 		CommandMonitor:    di.monitor,
+		Crypt:             di.crypt,
 		Database:          di.database,
 		Deployment:        di.deployment,
 		Selector:          di.selector,
@@ -165,6 +167,16 @@ func (di *DropIndexes) CommandMonitor(monitor *event.CommandMonitor) *DropIndexe
 	}
 
 	di.monitor = monitor
+	return di
+}
+
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (di *DropIndexes) Crypt(crypt *driver.Crypt) *DropIndexes {
+	if di == nil {
+		di = new(DropIndexes)
+	}
+
+	di.crypt = crypt
 	return di
 }
 

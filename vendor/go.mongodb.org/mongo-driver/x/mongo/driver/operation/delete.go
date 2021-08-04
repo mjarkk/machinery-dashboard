@@ -14,10 +14,10 @@ import (
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -29,11 +29,13 @@ type Delete struct {
 	clock        *session.ClusterClock
 	collection   string
 	monitor      *event.CommandMonitor
+	crypt        *driver.Crypt
 	database     string
 	deployment   driver.Deployment
 	selector     description.ServerSelector
 	writeConcern *writeconcern.WriteConcern
 	retry        *driver.RetryMode
+	hint         *bool
 	result       DeleteResult
 }
 
@@ -71,9 +73,9 @@ func NewDelete(deletes ...bsoncore.Document) *Delete {
 // Result returns the result of executing this operation.
 func (d *Delete) Result() DeleteResult { return d.result }
 
-func (d *Delete) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
-	var err error
-	d.result, err = buildDeleteResult(response, srvr)
+func (d *Delete) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, _ int) error {
+	dr, err := buildDeleteResult(response, srvr)
+	d.result.N += dr.N
 	return err
 }
 
@@ -97,6 +99,7 @@ func (d *Delete) Execute(ctx context.Context) error {
 		Client:            d.session,
 		Clock:             d.clock,
 		CommandMonitor:    d.monitor,
+		Crypt:             d.crypt,
 		Database:          d.database,
 		Deployment:        d.deployment,
 		Selector:          d.selector,
@@ -109,6 +112,14 @@ func (d *Delete) command(dst []byte, desc description.SelectedServer) ([]byte, e
 	dst = bsoncore.AppendStringElement(dst, "delete", d.collection)
 	if d.ordered != nil {
 		dst = bsoncore.AppendBooleanElement(dst, "ordered", *d.ordered)
+	}
+	if d.hint != nil && *d.hint {
+		if desc.WireVersion == nil || !desc.WireVersion.Includes(5) {
+			return nil, errors.New("the 'hint' command parameter requires a minimum server wire version of 5")
+		}
+		if !d.writeConcern.Acknowledged() {
+			return nil, errUnacknowledgedHint
+		}
 	}
 	return dst, nil
 }
@@ -176,6 +187,16 @@ func (d *Delete) CommandMonitor(monitor *event.CommandMonitor) *Delete {
 	return d
 }
 
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (d *Delete) Crypt(crypt *driver.Crypt) *Delete {
+	if d == nil {
+		d = new(Delete)
+	}
+
+	d.crypt = crypt
+	return d
+}
+
 // Database sets the database to run this operation against.
 func (d *Delete) Database(database string) *Delete {
 	if d == nil {
@@ -224,5 +245,17 @@ func (d *Delete) Retry(retry driver.RetryMode) *Delete {
 	}
 
 	d.retry = &retry
+	return d
+}
+
+// Hint is a flag to indicate that the update document contains a hint. Hint is only supported by
+// servers >= 4.4. Older servers >= 3.4 will report an error for using the hint option. For servers <
+// 3.4, the driver will return an error if the hint option is used.
+func (d *Delete) Hint(hint bool) *Delete {
+	if d == nil {
+		d = new(Delete)
+	}
+
+	d.hint = &hint
 	return d
 }
