@@ -13,11 +13,11 @@ import (
 	"errors"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/mongo/readconcern"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -31,6 +31,7 @@ type Distinct struct {
 	clock          *session.ClusterClock
 	collection     string
 	monitor        *event.CommandMonitor
+	crypt          *driver.Crypt
 	database       string
 	deployment     driver.Deployment
 	readConcern    *readconcern.ReadConcern
@@ -71,7 +72,7 @@ func NewDistinct(key string, query bsoncore.Document) *Distinct {
 // Result returns the result of executing this operation.
 func (d *Distinct) Result() DistinctResult { return d.result }
 
-func (d *Distinct) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
+func (d *Distinct) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, _ int) error {
 	var err error
 	d.result, err = buildDistinctResult(response, srvr)
 	return err
@@ -91,6 +92,7 @@ func (d *Distinct) Execute(ctx context.Context) error {
 		Client:            d.session,
 		Clock:             d.clock,
 		CommandMonitor:    d.monitor,
+		Crypt:             d.crypt,
 		Database:          d.database,
 		Deployment:        d.deployment,
 		ReadConcern:       d.readConcern,
@@ -197,6 +199,16 @@ func (d *Distinct) CommandMonitor(monitor *event.CommandMonitor) *Distinct {
 	}
 
 	d.monitor = monitor
+	return d
+}
+
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (d *Distinct) Crypt(crypt *driver.Crypt) *Distinct {
+	if d == nil {
+		d = new(Distinct)
+	}
+
+	d.crypt = crypt
 	return d
 }
 

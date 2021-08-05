@@ -13,9 +13,9 @@ import (
 	"errors"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -31,6 +31,7 @@ type ListIndexes struct {
 	deployment driver.Deployment
 	selector   description.ServerSelector
 	retry      *driver.RetryMode
+	crypt      *driver.Crypt
 
 	result driver.CursorResponse
 }
@@ -49,7 +50,7 @@ func (li *ListIndexes) Result(opts driver.CursorOptions) (*driver.BatchCursor, e
 	return driver.NewBatchCursor(li.result, clientSession, clock, opts)
 }
 
-func (li *ListIndexes) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
+func (li *ListIndexes) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, _ int) error {
 	var err error
 
 	li.result, err = driver.NewCursorResponse(response, srvr, desc)
@@ -73,6 +74,7 @@ func (li *ListIndexes) Execute(ctx context.Context) error {
 		Database:       li.database,
 		Deployment:     li.deployment,
 		Selector:       li.selector,
+		Crypt:          li.crypt,
 		Legacy:         driver.LegacyListIndexes,
 		RetryMode:      li.retry,
 		Type:           driver.Read,
@@ -196,5 +198,15 @@ func (li *ListIndexes) Retry(retry driver.RetryMode) *ListIndexes {
 	}
 
 	li.retry = &retry
+	return li
+}
+
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (li *ListIndexes) Crypt(crypt *driver.Crypt) *ListIndexes {
+	if li == nil {
+		li = new(ListIndexes)
+	}
+
+	li.crypt = crypt
 	return li
 }

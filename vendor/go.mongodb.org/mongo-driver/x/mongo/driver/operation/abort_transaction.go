@@ -13,10 +13,10 @@ import (
 	"errors"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -27,6 +27,7 @@ type AbortTransaction struct {
 	clock         *session.ClusterClock
 	collection    string
 	monitor       *event.CommandMonitor
+	crypt         *driver.Crypt
 	database      string
 	deployment    driver.Deployment
 	selector      description.ServerSelector
@@ -39,7 +40,7 @@ func NewAbortTransaction() *AbortTransaction {
 	return &AbortTransaction{}
 }
 
-func (at *AbortTransaction) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
+func (at *AbortTransaction) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, currIndex int) error {
 	var err error
 	return err
 }
@@ -58,6 +59,7 @@ func (at *AbortTransaction) Execute(ctx context.Context) error {
 		Client:            at.session,
 		Clock:             at.clock,
 		CommandMonitor:    at.monitor,
+		Crypt:             at.crypt,
 		Database:          at.database,
 		Deployment:        at.deployment,
 		Selector:          at.selector,
@@ -122,6 +124,16 @@ func (at *AbortTransaction) CommandMonitor(monitor *event.CommandMonitor) *Abort
 	}
 
 	at.monitor = monitor
+	return at
+}
+
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (at *AbortTransaction) Crypt(crypt *driver.Crypt) *AbortTransaction {
+	if at == nil {
+		at = new(AbortTransaction)
+	}
+
+	at.crypt = crypt
 	return at
 }
 

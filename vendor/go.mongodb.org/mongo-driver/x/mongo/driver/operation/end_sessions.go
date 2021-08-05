@@ -13,9 +13,9 @@ import (
 	"errors"
 
 	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/mongo/description"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/description"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/session"
 )
 
@@ -25,6 +25,7 @@ type EndSessions struct {
 	session    *session.Client
 	clock      *session.ClusterClock
 	monitor    *event.CommandMonitor
+	crypt      *driver.Crypt
 	database   string
 	deployment driver.Deployment
 	selector   description.ServerSelector
@@ -37,7 +38,7 @@ func NewEndSessions(sessionIDs bsoncore.Document) *EndSessions {
 	}
 }
 
-func (es *EndSessions) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server) error {
+func (es *EndSessions) processResponse(response bsoncore.Document, srvr driver.Server, desc description.Server, _ int) error {
 	var err error
 	return err
 }
@@ -54,6 +55,7 @@ func (es *EndSessions) Execute(ctx context.Context) error {
 		Client:            es.session,
 		Clock:             es.clock,
 		CommandMonitor:    es.monitor,
+		Crypt:             es.crypt,
 		Database:          es.database,
 		Deployment:        es.deployment,
 		Selector:          es.selector,
@@ -105,6 +107,16 @@ func (es *EndSessions) CommandMonitor(monitor *event.CommandMonitor) *EndSession
 	}
 
 	es.monitor = monitor
+	return es
+}
+
+// Crypt sets the Crypt object to use for automatic encryption and decryption.
+func (es *EndSessions) Crypt(crypt *driver.Crypt) *EndSessions {
+	if es == nil {
+		es = new(EndSessions)
+	}
+
+	es.crypt = crypt
 	return es
 }
 
