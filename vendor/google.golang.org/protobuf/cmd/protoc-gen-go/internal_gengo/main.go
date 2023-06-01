@@ -128,6 +128,9 @@ func genGeneratedHeader(gen *protogen.Plugin, g *protogen.GeneratedFile, f *file
 		protocVersion := "(unknown)"
 		if v := gen.Request.GetCompilerVersion(); v != nil {
 			protocVersion = fmt.Sprintf("v%v.%v.%v", v.GetMajor(), v.GetMinor(), v.GetPatch())
+			if s := v.GetSuffix(); s != "" {
+				protocVersion += "-" + s
+			}
 		}
 		g.P("// \tprotoc-gen-go ", protocGenGoVersion)
 		g.P("// \tprotoc        ", protocVersion)
@@ -225,6 +228,7 @@ func genEnum(g *protogen.GeneratedFile, f *fileInfo, e *enumInfo) {
 	// Enum type declaration.
 	g.Annotate(e.GoIdent.GoName, e.Location)
 	leadingComments := appendDeprecationSuffix(e.Comments.Leading,
+		e.Desc.ParentFile(),
 		e.Desc.Options().(*descriptorpb.EnumOptions).GetDeprecated())
 	g.P(leadingComments,
 		"type ", e.GoIdent, " int32")
@@ -234,6 +238,7 @@ func genEnum(g *protogen.GeneratedFile, f *fileInfo, e *enumInfo) {
 	for _, value := range e.Values {
 		g.Annotate(value.GoIdent.GoName, value.Location)
 		leadingComments := appendDeprecationSuffix(value.Comments.Leading,
+			value.Desc.ParentFile(),
 			value.Desc.Options().(*descriptorpb.EnumValueOptions).GetDeprecated())
 		g.P(leadingComments,
 			value.GoIdent, " ", e.GoIdent, " = ", value.Desc.Number(),
@@ -319,6 +324,7 @@ func genMessage(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
 	// Message type declaration.
 	g.Annotate(m.GoIdent.GoName, m.Location)
 	leadingComments := appendDeprecationSuffix(m.Comments.Leading,
+		m.Desc.ParentFile(),
 		m.Desc.Options().(*descriptorpb.MessageOptions).GetDeprecated())
 	g.P(leadingComments,
 		"type ", m.GoIdent, " struct {")
@@ -418,6 +424,7 @@ func genMessageField(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, fie
 	}
 	g.Annotate(m.GoIdent.GoName+"."+name, field.Location)
 	leadingComments := appendDeprecationSuffix(field.Comments.Leading,
+		field.Desc.ParentFile(),
 		field.Desc.Options().(*descriptorpb.FieldOptions).GetDeprecated())
 	g.P(leadingComments,
 		name, " ", goType, tags,
@@ -444,7 +451,15 @@ func genMessageDefaultDecls(g *protogen.GeneratedFile, f *fileInfo, m *messageIn
 		case protoreflect.EnumKind:
 			idx := field.Desc.DefaultEnumValue().Index()
 			val := field.Enum.Values[idx]
-			consts = append(consts, fmt.Sprintf("%s = %s", name, g.QualifiedGoIdent(val.GoIdent)))
+			if val.GoIdent.GoImportPath == f.GoImportPath {
+				consts = append(consts, fmt.Sprintf("%s = %s", name, g.QualifiedGoIdent(val.GoIdent)))
+			} else {
+				// If the enum value is declared in a different Go package,
+				// reference it by number since the name may not be correct.
+				// See https://github.com/golang/protobuf/issues/513.
+				consts = append(consts, fmt.Sprintf("%s = %s(%d) // %s",
+					name, g.QualifiedGoIdent(field.Enum.GoIdent), val.Desc.Number(), g.QualifiedGoIdent(val.GoIdent)))
+			}
 		case protoreflect.FloatKind, protoreflect.DoubleKind:
 			if f := defVal.Float(); math.IsNaN(f) || math.IsInf(f, 0) {
 				var fn, arg string
@@ -527,25 +542,6 @@ func genMessageBaseMethods(g *protogen.GeneratedFile, f *fileInfo, m *messageInf
 		g.P()
 		f.needRawDesc = true
 	}
-
-	// ExtensionRangeArray method.
-	extRanges := m.Desc.ExtensionRanges()
-	if m.genExtRangeMethod && extRanges.Len() > 0 {
-		protoExtRange := protoifacePackage.Ident("ExtensionRangeV1")
-		extRangeVar := "extRange_" + m.GoIdent.GoName
-		g.P("var ", extRangeVar, " = []", protoExtRange, " {")
-		for i := 0; i < extRanges.Len(); i++ {
-			r := extRanges.Get(i)
-			g.P("{Start:", r[0], ", End:", r[1]-1 /* inclusive */, "},")
-		}
-		g.P("}")
-		g.P()
-		g.P("// Deprecated: Use ", m.GoIdent, ".ProtoReflect.Descriptor.ExtensionRanges instead.")
-		g.P("func (*", m.GoIdent, ") ExtensionRangeArray() []", protoExtRange, " {")
-		g.P("return ", extRangeVar)
-		g.P("}")
-		g.P()
-	}
 }
 
 func genMessageGetterMethods(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
@@ -566,9 +562,10 @@ func genMessageGetterMethods(g *protogen.GeneratedFile, f *fileInfo, m *messageI
 
 		// Getter for message field.
 		goType, pointer := fieldGoType(g, f, field)
-		defaultValue := fieldDefaultValue(g, m, field)
+		defaultValue := fieldDefaultValue(g, f, m, field)
 		g.Annotate(m.GoIdent.GoName+".Get"+field.GoName, field.Location)
 		leadingComments := appendDeprecationSuffix("",
+			field.Desc.ParentFile(),
 			field.Desc.Options().(*descriptorpb.FieldOptions).GetDeprecated())
 		switch {
 		case field.Desc.IsWeak():
@@ -619,6 +616,7 @@ func genMessageSetterMethods(g *protogen.GeneratedFile, f *fileInfo, m *messageI
 
 		g.Annotate(m.GoIdent.GoName+".Set"+field.GoName, field.Location)
 		leadingComments := appendDeprecationSuffix("",
+			field.Desc.ParentFile(),
 			field.Desc.Options().(*descriptorpb.FieldOptions).GetDeprecated())
 		g.P(leadingComments, "func (x *", m.GoIdent, ") Set", field.GoName, "(v ", protoPackage.Ident("Message"), ") {")
 		g.P("var w *", protoimplPackage.Ident("WeakFields"))
@@ -688,7 +686,7 @@ func fieldProtobufTagValue(field *protogen.Field) string {
 	return tag.Marshal(field.Desc, enumName)
 }
 
-func fieldDefaultValue(g *protogen.GeneratedFile, m *messageInfo, field *protogen.Field) string {
+func fieldDefaultValue(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, field *protogen.Field) string {
 	if field.Desc.IsList() {
 		return "nil"
 	}
@@ -707,7 +705,15 @@ func fieldDefaultValue(g *protogen.GeneratedFile, m *messageInfo, field *protoge
 	case protoreflect.MessageKind, protoreflect.GroupKind, protoreflect.BytesKind:
 		return "nil"
 	case protoreflect.EnumKind:
-		return g.QualifiedGoIdent(field.Enum.Values[0].GoIdent)
+		val := field.Enum.Values[0]
+		if val.GoIdent.GoImportPath == f.GoImportPath {
+			return g.QualifiedGoIdent(val.GoIdent)
+		} else {
+			// If the enum value is declared in a different Go package,
+			// reference it by number since the name may not be correct.
+			// See https://github.com/golang/protobuf/issues/513.
+			return g.QualifiedGoIdent(field.Enum.GoIdent) + "(" + strconv.FormatInt(int64(val.Desc.Number()), 10) + ")"
+		}
 	default:
 		return "0"
 	}
@@ -773,6 +779,7 @@ func genExtensions(g *protogen.GeneratedFile, f *fileInfo) {
 			leadingComments += protogen.Comments(fmt.Sprintf(" %v %v %v = %v;\n",
 				xd.Cardinality(), typeName, fieldName, xd.Number()))
 			leadingComments = appendDeprecationSuffix(leadingComments,
+				x.Desc.ParentFile(),
 				x.Desc.Options().(*descriptorpb.FieldOptions).GetDeprecated())
 			g.P(leadingComments,
 				"E_", x.GoIdent, " = &", extensionTypesVarName(f), "[", allExtensionsByPtr[x], "]",
@@ -807,6 +814,7 @@ func genMessageOneofWrapperTypes(g *protogen.GeneratedFile, f *fileInfo, m *mess
 				tags = append(tags, gotrackTags...)
 			}
 			leadingComments := appendDeprecationSuffix(field.Comments.Leading,
+				field.Desc.ParentFile(),
 				field.Desc.Options().(*descriptorpb.FieldOptions).GetDeprecated())
 			g.P(leadingComments,
 				field.GoName, " ", goType, tags,
@@ -860,14 +868,18 @@ func (tags structTags) String() string {
 }
 
 // appendDeprecationSuffix optionally appends a deprecation notice as a suffix.
-func appendDeprecationSuffix(prefix protogen.Comments, deprecated bool) protogen.Comments {
-	if !deprecated {
+func appendDeprecationSuffix(prefix protogen.Comments, parentFile protoreflect.FileDescriptor, deprecated bool) protogen.Comments {
+	fileDeprecated := parentFile.Options().(*descriptorpb.FileOptions).GetDeprecated()
+	if !deprecated && !fileDeprecated {
 		return prefix
 	}
 	if prefix != "" {
 		prefix += "\n"
 	}
-	return prefix + " Deprecated: Do not use.\n"
+	if fileDeprecated {
+		return prefix + " Deprecated: The entire proto file " + protogen.Comments(parentFile.Path()) + " is marked as deprecated.\n"
+	}
+	return prefix + " Deprecated: Marked as deprecated in " + protogen.Comments(parentFile.Path()) + ".\n"
 }
 
 // trailingComment is like protogen.Comments, but lacks a trailing newline.
